@@ -1,0 +1,23 @@
+SET
+COPY 1
+COPY 3
+COPY 3
+COPY 4
+COPY 20
+COPY 80
+COPY 520
+COPY 1560
+COPY 1140
+COPY 2280
+COPY 25080
+COPY 31659
+COPY 1140000
+VACUUM
+     tbl      |  count  
+--------------+---------
+ match        |    1140
+ player_match |   25080
+ shot         |   31659
+ event        | 1140000
+(4 rows)
+

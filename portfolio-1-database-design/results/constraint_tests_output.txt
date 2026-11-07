@@ -1,0 +1,23 @@
+SET
+--- T1: a team cannot play itself (CHECK match_two_teams)
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:8: ERROR:  new row for relation "match" violates check constraint "match_two_teams"
+--- T2: a finished match must have a score (CHECK match_score_status)
+BEGIN
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:11: ERROR:  new row for relation "match" violates check constraint "match_score_status"
+ROLLBACK
+--- T3: a player cannot be attached to a team that did not play the match (composite FK to match_team)
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:16: ERROR:  insert or update on table "player_match" violates foreign key constraint "player_match_match_id_team_id_fkey"
+--- T4: the same fixture cannot be scheduled twice in a season (UNIQUE cs_id, home, away)
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:20: ERROR:  duplicate key value violates unique constraint "match_cs_id_home_team_id_away_team_id_key"
+--- T5: two teams cannot share a short code (UNIQUE short_code)
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:23: ERROR:  duplicate key value violates unique constraint "team_short_code_key"
+--- T6: a position must be GK/DF/MF/FW (CHECK)
+--- T7: standings points must equal 3*won + drawn (CHECK standings_points_ok)
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:26: ERROR:  new row for relation "player" violates check constraint "player_primary_position_check"
+UPDATE 0
+--- T8: deleting a team that has matches is blocked (foreign key)
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:32: ERROR:  update or delete on table "team" violates foreign key constraint "squad_membership_team_id_fkey" on table "squad_membership"
+--- T9: the api_reader role cannot write (privileges)
+SET
+psql:/work/portfolio-1-database-design/sql/05_constraint_tests.sql:36: ERROR:  permission denied for table match
+RESET
