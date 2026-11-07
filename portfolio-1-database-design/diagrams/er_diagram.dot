@@ -1,0 +1,79 @@
+digraph ER {
+  rankdir=LR; splines=true; nodesep=0.35; ranksep=0.9;
+  node [shape=plain, fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica", fontsize=8, arrowhead=crow, arrowtail=none, dir=both, arrowtail=tee];
+
+  competition [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>competition</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>competition_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">name (UQ)</TD></TR>
+    <TR><TD ALIGN="LEFT">country, tier</TD></TR></TABLE>>];
+  season [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>season</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>season_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">label (UQ)</TD></TR>
+    <TR><TD ALIGN="LEFT">start_date, end_date</TD></TR></TABLE>>];
+  competition_season [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>competition_season</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>cs_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">competition_id FK</TD></TR>
+    <TR><TD ALIGN="LEFT">season_id FK  (UQ pair)</TD></TR></TABLE>>];
+  team [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>team</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>team_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">canonical_name (UQ)</TD></TR>
+    <TR><TD ALIGN="LEFT">short_code (UQ)</TD></TR><TR><TD ALIGN="LEFT">country, founded_year</TD></TR></TABLE>>];
+  provider [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>provider</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>provider_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">name (UQ), role</TD></TR></TABLE>>];
+  team_provider_map [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>team_provider_map</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>provider_id, provider_team_ref</U> PK</TD></TR>
+    <TR><TD ALIGN="LEFT">team_id FK</TD></TR></TABLE>>];
+  player [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>player</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>player_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">full_name, birth_date</TD></TR>
+    <TR><TD ALIGN="LEFT">nationality, primary_position</TD></TR></TABLE>>];
+  squad_membership [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#1f3a5f"><FONT COLOR="white"><B>squad_membership</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>player_id, team_id, cs_id</U> PK/FK</TD></TR><TR><TD ALIGN="LEFT">shirt_number</TD></TR></TABLE>>];
+  match [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#7a2e1d"><FONT COLOR="white"><B>match</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>match_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">cs_id FK, matchday, kickoff_ts</TD></TR>
+    <TR><TD ALIGN="LEFT">home_team_id FK, away_team_id FK</TD></TR>
+    <TR><TD ALIGN="LEFT">home_goals, away_goals, status</TD></TR></TABLE>>];
+  match_team [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#7a2e1d"><FONT COLOR="white"><B>match_team</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>match_id, team_id</U> PK/FK</TD></TR><TR><TD ALIGN="LEFT">is_home, xg, shots, possession_pct</TD></TR></TABLE>>];
+  player_match [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#7a2e1d"><FONT COLOR="white"><B>player_match</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>match_id, player_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">(match_id, team_id) FK to match_team</TD></TR>
+    <TR><TD ALIGN="LEFT">minutes, position, goals, assists, xg ...</TD></TR></TABLE>>];
+  shot [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#7a2e1d"><FONT COLOR="white"><B>shot</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>shot_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">match_id, player_id, team_id FK</TD></TR>
+    <TR><TD ALIGN="LEFT">minute, x, y, xg, outcome, body_part</TD></TR></TABLE>>];
+  event [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#7a2e1d"><FONT COLOR="white"><B>event</B> (1.14M rows)</FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>event_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">match_id, team_id, player_id FK</TD></TR>
+    <TR><TD ALIGN="LEFT">receiver_id FK (passes)</TD></TR><TR><TD ALIGN="LEFT">minute, second, event_type, x, y, end_x, end_y</TD></TR></TABLE>>];
+  standings [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#2e6b3a"><FONT COLOR="white"><B>standings</B> (derived)</FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>cs_id, team_id</U> PK/FK</TD></TR><TR><TD ALIGN="LEFT">played, won, drawn, lost, gf, ga, points</TD></TR></TABLE>>];
+  player_rating [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#2e6b3a"><FONT COLOR="white"><B>player_rating</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>player_id, cs_id, head</U> PK</TD></TR><TR><TD ALIGN="LEFT">rating, computed_at</TD></TR></TABLE>>];
+  ingestion_job [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#2e6b3a"><FONT COLOR="white"><B>ingestion_job</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>job_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">provider_id, match_id FK, status</TD></TR></TABLE>>];
+  result_audit [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" BGCOLOR="white">
+    <TR><TD BGCOLOR="#2e6b3a"><FONT COLOR="white"><B>result_audit</B></FONT></TD></TR>
+    <TR><TD ALIGN="LEFT"><U>audit_id</U> PK</TD></TR><TR><TD ALIGN="LEFT">match_id FK, old/new goals</TD></TR></TABLE>>];
+
+  competition -> competition_season; season -> competition_season;
+  competition_season -> match; competition_season -> squad_membership;
+  competition_season -> standings; competition_season -> player_rating;
+  team -> squad_membership; player -> squad_membership;
+  team -> team_provider_map; provider -> team_provider_map;
+  team -> match [label="home / away"]; match -> match_team; team -> match_team;
+  match_team -> player_match; player -> player_match;
+  match -> shot; player -> shot; match -> event; player -> event;
+  team -> standings; player -> player_rating;
+  provider -> ingestion_job; match -> ingestion_job; match -> result_audit;
+}
