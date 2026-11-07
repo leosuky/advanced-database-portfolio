@@ -1,0 +1,18 @@
+-- Q5: Successful passes by one busy player (large-table filter)
+-- phase: after   median of 14 warm runs: 0.60 ms
+
+SELECT count(*) AS passes, round(avg(end_x - x), 1) AS avg_forward_distance
+FROM event
+WHERE player_id = 417 AND event_type = 'pass' AND successful;
+
+Aggregate  (cost=192.49..192.50 rows=1 width=40) (actual time=0.566..0.567 rows=1 loops=1)
+  Buffers: shared hit=20
+  ->  Index Only Scan using idx_event_player_type on event  (cost=0.43..174.58 rows=2387 width=12) (actual time=0.005..0.284 rows=2695 loops=1)
+        Index Cond: ((player_id = 417) AND (event_type = 'pass'::text))
+        Filter: successful
+        Rows Removed by Filter: 593
+        Heap Fetches: 0
+        Buffers: shared hit=20
+Settings: search_path = 'dataxi, public', max_parallel_workers_per_gather = '0'
+Planning Time: 0.016 ms
+Execution Time: 0.571 ms
