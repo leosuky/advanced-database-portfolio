@@ -1,0 +1,14 @@
+-- Q8: All goals scored by headers in the 80th minute or later (partial-index candidate)
+-- phase: before   median of 14 warm runs: 1.60 ms
+
+SELECT count(*) FROM shot WHERE outcome = 'goal' AND body_part = 'head' AND minute >= 80;
+
+Aggregate  (cost=898.23..898.24 rows=1 width=8) (actual time=1.567..1.567 rows=1 loops=1)
+  Buffers: shared hit=344
+  ->  Seq Scan on shot  (cost=0.00..898.03 rows=80 width=0) (actual time=0.007..1.563 rows=88 loops=1)
+        Filter: ((minute >= 80) AND (outcome = 'goal'::text) AND (body_part = 'head'::text))
+        Rows Removed by Filter: 31571
+        Buffers: shared hit=344
+Settings: search_path = 'dataxi, public', max_parallel_workers_per_gather = '0'
+Planning Time: 0.013 ms
+Execution Time: 1.571 ms

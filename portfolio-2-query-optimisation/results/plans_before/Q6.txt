@@ -1,0 +1,32 @@
+-- Q6: Pass network for one match (edges between passers and receivers)
+-- phase: before   median of 14 warm runs: 77.17 ms
+
+SELECT e.player_id AS passer, e.receiver_id AS receiver, count(*) AS passes
+FROM event e
+WHERE e.match_id = 951 AND e.event_type = 'pass' AND e.successful AND e.receiver_id IS NOT NULL
+GROUP BY e.player_id, e.receiver_id
+ORDER BY passes DESC
+LIMIT 10;
+
+Limit  (cost=30083.66..30083.68 rows=10 width=16) (actual time=77.833..77.835 rows=10 loops=1)
+  Buffers: shared hit=12960
+  ->  Sort  (cost=30083.66..30084.38 rows=287 width=16) (actual time=77.832..77.833 rows=10 loops=1)
+        Sort Key: (count(*)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=12960
+        ->  GroupAggregate  (cost=30071.72..30077.46 rows=287 width=16) (actual time=77.746..77.814 rows=196 loops=1)
+              Group Key: player_id, receiver_id
+              Buffers: shared hit=12960
+              ->  Sort  (cost=30071.72..30072.43 rows=287 width=8) (actual time=77.743..77.762 rows=476 loops=1)
+                    Sort Key: player_id, receiver_id
+                    Sort Method: quicksort  Memory: 39kB
+                    Buffers: shared hit=12960
+                    ->  Seq Scan on event e  (cost=0.00..30060.00 rows=287 width=8) (actual time=64.570..77.667 rows=476 loops=1)
+                          Filter: (successful AND (receiver_id IS NOT NULL) AND (match_id = 951) AND (event_type = 'pass'::text))
+                          Rows Removed by Filter: 1139524
+                          Buffers: shared hit=12960
+Settings: search_path = 'dataxi, public', max_parallel_workers_per_gather = '0'
+Planning:
+  Buffers: shared hit=3
+Planning Time: 0.076 ms
+Execution Time: 77.856 ms

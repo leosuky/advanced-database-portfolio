@@ -1,0 +1,56 @@
+-- Q1: Top 10 scorers in 2025/26 (join + aggregate)
+-- phase: before   median of 14 warm runs: 6.98 ms
+
+SELECT p.full_name, t.canonical_name AS team,
+       sum(pm.goals) AS goals, sum(pm.assists) AS assists, round(sum(pm.xg),2) AS xg
+FROM player_match pm
+JOIN match  m ON m.match_id = pm.match_id AND m.cs_id = 3
+JOIN player p ON p.player_id = pm.player_id
+JOIN team   t ON t.team_id   = pm.team_id
+GROUP BY p.player_id, p.full_name, t.canonical_name
+ORDER BY goals DESC, xg DESC
+LIMIT 10;
+
+Limit  (cost=1032.30..1032.33 rows=10 width=78) (actual time=7.941..7.946 rows=10 loops=1)
+  Buffers: shared hit=225
+  ->  Sort  (cost=1032.30..1053.20 rows=8360 width=78) (actual time=7.941..7.944 rows=10 loops=1)
+        Sort Key: (sum(pm.goals)) DESC, (round(sum(pm.xg), 2)) DESC
+        Sort Method: top-N heapsort  Memory: 27kB
+        Buffers: shared hit=225
+        ->  HashAggregate  (cost=726.25..851.65 rows=8360 width=78) (actual time=7.710..7.867 rows=520 loops=1)
+              Group Key: p.player_id, t.canonical_name
+              Batches: 1  Memory Usage: 657kB
+              Buffers: shared hit=225
+              ->  Hash Join  (cost=46.15..621.75 rows=8360 width=38) (actual time=2.285..6.120 rows=8360 loops=1)
+                    Hash Cond: (pm.team_id = t.team_id)
+                    Buffers: shared hit=225
+                    ->  Hash Join  (cost=44.70..593.70 rows=8360 width=27) (actual time=2.276..5.127 rows=8360 loops=1)
+                          Hash Cond: (pm.player_id = p.player_id)
+                          Buffers: shared hit=224
+                          ->  Hash Join  (cost=29.00..555.88 rows=8360 width=16) (actual time=2.193..3.968 rows=8360 loops=1)
+                                Hash Cond: (pm.match_id = m.match_id)
+                                Buffers: shared hit=220
+                                ->  Seq Scan on player_match pm  (cost=0.00..460.80 rows=25080 width=20) (actual time=0.002..1.630 rows=25080 loops=1)
+                                      Buffers: shared hit=210
+                                ->  Hash  (cost=24.25..24.25 rows=380 width=4) (actual time=0.082..0.083 rows=380 loops=1)
+                                      Buckets: 1024  Batches: 1  Memory Usage: 22kB
+                                      Buffers: shared hit=10
+                                      ->  Seq Scan on match m  (cost=0.00..24.25 rows=380 width=4) (actual time=0.027..0.053 rows=380 loops=1)
+                                            Filter: (cs_id = 3)
+                                            Rows Removed by Filter: 760
+                                            Buffers: shared hit=10
+                          ->  Hash  (cost=9.20..9.20 rows=520 width=15) (actual time=0.081..0.082 rows=520 loops=1)
+                                Buckets: 1024  Batches: 1  Memory Usage: 34kB
+                                Buffers: shared hit=4
+                                ->  Seq Scan on player p  (cost=0.00..9.20 rows=520 width=15) (actual time=0.002..0.034 rows=520 loops=1)
+                                      Buffers: shared hit=4
+                    ->  Hash  (cost=1.20..1.20 rows=20 width=19) (actual time=0.008..0.008 rows=20 loops=1)
+                          Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                          Buffers: shared hit=1
+                          ->  Seq Scan on team t  (cost=0.00..1.20 rows=20 width=19) (actual time=0.003..0.004 rows=20 loops=1)
+                                Buffers: shared hit=1
+Settings: search_path = 'dataxi, public', max_parallel_workers_per_gather = '0'
+Planning:
+  Buffers: shared hit=28
+Planning Time: 0.306 ms
+Execution Time: 7.980 ms

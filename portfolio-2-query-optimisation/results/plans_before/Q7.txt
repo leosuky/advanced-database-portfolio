@@ -1,0 +1,88 @@
+-- Q7: Each team's top scorer, correlated subquery version
+-- phase: before   median of 14 warm runs: 477.85 ms
+
+SELECT t.canonical_name, p.full_name, s.goals
+FROM (
+    SELECT pm.team_id, pm.player_id, sum(pm.goals) AS goals
+    FROM player_match pm JOIN match m ON m.match_id = pm.match_id AND m.cs_id = 3
+    GROUP BY pm.team_id, pm.player_id
+) s
+JOIN team t   ON t.team_id   = s.team_id
+JOIN player p ON p.player_id = s.player_id
+WHERE s.goals = (SELECT max(s2.goals) FROM (
+                    SELECT pm.player_id, sum(pm.goals) AS goals
+                    FROM player_match pm JOIN match m ON m.match_id = pm.match_id AND m.cs_id = 3
+                    WHERE pm.team_id = s.team_id GROUP BY pm.player_id) s2)
+ORDER BY s.goals DESC
+LIMIT 5;
+
+Limit  (cost=1423504.00..1423504.01 rows=1 width=34) (actual time=575.267..575.270 rows=5 loops=1)
+  Buffers: shared hit=109508
+  ->  Sort  (cost=1423504.00..1423504.01 rows=1 width=34) (actual time=377.669..377.672 rows=5 loops=1)
+        Sort Key: s.goals DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=109508
+        ->  Nested Loop  (cost=618.58..1423503.99 rows=1 width=34) (actual time=58.058..377.652 rows=30 loops=1)
+              Join Filter: (p.player_id = s.player_id)
+              Rows Removed by Join Filter: 8020
+              Buffers: shared hit=109508
+              ->  Nested Loop  (cost=618.58..1423488.29 rows=1 width=27) (actual time=58.041..376.893 rows=30 loops=1)
+                    Join Filter: (t.team_id = s.team_id)
+                    Rows Removed by Join Filter: 570
+                    Buffers: shared hit=109431
+                    ->  Seq Scan on team t  (cost=0.00..1.20 rows=20 width=19) (actual time=0.015..0.017 rows=20 loops=1)
+                          Buffers: shared hit=1
+                    ->  Materialize  (cost=618.58..1423483.23 rows=13 width=16) (actual time=0.669..18.841 rows=30 loops=20)
+                          Buffers: shared hit=109430
+                          ->  Subquery Scan on s  (cost=618.58..1423483.16 rows=13 width=16) (actual time=13.385..376.772 rows=30 loops=1)
+                                Filter: (s.goals = (SubPlan 1))
+                                Rows Removed by Filter: 490
+                                Buffers: shared hit=109430
+                                ->  HashAggregate  (cost=618.58..643.66 rows=2508 width=16) (actual time=3.971..4.106 rows=520 loops=1)
+                                      Group Key: pm.team_id, pm.player_id
+                                      Batches: 1  Memory Usage: 177kB
+                                      Buffers: shared hit=220
+                                      ->  Hash Join  (cost=29.00..555.88 rows=8360 width=10) (actual time=1.772..3.209 rows=8360 loops=1)
+                                            Hash Cond: (pm.match_id = m.match_id)
+                                            Buffers: shared hit=220
+                                            ->  Seq Scan on player_match pm  (cost=0.00..460.80 rows=25080 width=14) (actual time=0.003..1.310 rows=25080 loops=1)
+                                                  Buffers: shared hit=210
+                                            ->  Hash  (cost=24.25..24.25 rows=380 width=4) (actual time=0.085..0.085 rows=380 loops=1)
+                                                  Buckets: 1024  Batches: 1  Memory Usage: 22kB
+                                                  Buffers: shared hit=10
+                                                  ->  Seq Scan on match m  (cost=0.00..24.25 rows=380 width=4) (actual time=0.026..0.051 rows=380 loops=1)
+                                                        Filter: (cs_id = 3)
+                                                        Rows Removed by Filter: 760
+                                                        Buffers: shared hit=10
+                                SubPlan 1
+                                  ->  Aggregate  (cost=567.30..567.31 rows=1 width=8) (actual time=0.716..0.716 rows=1 loops=520)
+                                        Buffers: shared hit=109210
+                                        ->  HashAggregate  (cost=557.89..562.07 rows=418 width=12) (actual time=0.711..0.714 rows=26 loops=520)
+                                              Group Key: pm_1.player_id
+                                              Batches: 1  Memory Usage: 37kB
+                                              Buffers: shared hit=109210
+                                              ->  Hash Join  (cost=29.00..555.80 rows=418 width=6) (actual time=0.433..0.676 rows=418 loops=520)
+                                                    Hash Cond: (pm_1.match_id = m_1.match_id)
+                                                    Buffers: shared hit=109210
+                                                    ->  Seq Scan on player_match pm_1  (cost=0.00..523.50 rows=1254 width=10) (actual time=0.003..0.581 rows=1254 loops=520)
+                                                          Filter: (team_id = s.team_id)
+                                                          Rows Removed by Filter: 23826
+                                                          Buffers: shared hit=109200
+                                                    ->  Hash  (cost=24.25..24.25 rows=380 width=4) (actual time=0.072..0.072 rows=380 loops=1)
+                                                          Buckets: 1024  Batches: 1  Memory Usage: 22kB
+                                                          Buffers: shared hit=10
+                                                          ->  Seq Scan on match m_1  (cost=0.00..24.25 rows=380 width=4) (actual time=0.017..0.040 rows=380 loops=1)
+                                                                Filter: (cs_id = 3)
+                                                                Rows Removed by Filter: 760
+                                                                Buffers: shared hit=10
+              ->  Seq Scan on player p  (cost=0.00..9.20 rows=520 width=15) (actual time=0.001..0.014 rows=268 loops=30)
+                    Buffers: shared hit=77
+Settings: search_path = 'dataxi, public', max_parallel_workers_per_gather = '0'
+Planning:
+  Buffers: shared hit=29
+Planning Time: 0.557 ms
+JIT:
+  Functions: 50
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 1.120 ms, Inlining 5.942 ms, Optimization 144.581 ms, Emission 47.122 ms, Total 198.766 ms
+Execution Time: 576.589 ms

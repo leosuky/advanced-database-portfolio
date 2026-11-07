@@ -1,0 +1,36 @@
+-- Q4: Rolling 5-match points form for one team (window function)
+-- phase: before   median of 14 warm runs: 0.09 ms
+
+WITH results AS (
+    SELECT m.kickoff_ts,
+           CASE WHEN m.home_team_id = 1 THEN m.home_goals ELSE m.away_goals END AS gf,
+           CASE WHEN m.home_team_id = 1 THEN m.away_goals ELSE m.home_goals END AS ga
+    FROM match m
+    WHERE m.cs_id = 3 AND (m.home_team_id = 1 OR m.away_team_id = 1)
+)
+SELECT kickoff_ts::date, gf, ga,
+       sum(CASE WHEN gf > ga THEN 3 WHEN gf = ga THEN 1 ELSE 0 END)
+           OVER (ORDER BY kickoff_ts ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS points_last_5
+FROM results
+ORDER BY kickoff_ts
+LIMIT 10;
+
+Limit  (cost=33.19..33.22 rows=10 width=24) (actual time=0.080..0.082 rows=10 loops=1)
+  Buffers: shared hit=10
+  ->  Sort  (cost=33.19..33.29 rows=37 width=24) (actual time=0.080..0.081 rows=10 loops=1)
+        Sort Key: ((m.kickoff_ts)::date)
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=10
+        ->  WindowAgg  (cost=30.91..32.39 rows=37 width=24) (actual time=0.058..0.076 rows=38 loops=1)
+              Buffers: shared hit=10
+              ->  Sort  (cost=30.91..31.01 rows=37 width=16) (actual time=0.054..0.056 rows=38 loops=1)
+                    Sort Key: m.kickoff_ts
+                    Sort Method: quicksort  Memory: 26kB
+                    Buffers: shared hit=10
+                    ->  Seq Scan on match m  (cost=0.00..29.95 rows=37 width=16) (actual time=0.030..0.050 rows=38 loops=1)
+                          Filter: ((cs_id = 3) AND ((home_team_id = 1) OR (away_team_id = 1)))
+                          Rows Removed by Filter: 1102
+                          Buffers: shared hit=10
+Settings: search_path = 'dataxi, public', max_parallel_workers_per_gather = '0'
+Planning Time: 0.043 ms
+Execution Time: 0.095 ms
