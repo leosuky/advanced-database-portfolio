@@ -1,0 +1,128 @@
+SET
+SET
+Timing is off.
+=== A. Same join, three algorithms (we disable the planner's favourite to force the others) ===
+--- A1. planner default
+                                                                 QUERY PLAN                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=570.33..570.34 rows=1 width=8) (actual time=4.330..4.331 rows=1 loops=1)
+   ->  Hash Join  (cost=22.55..549.43 rows=8360 width=0) (actual time=2.517..4.067 rows=8360 loops=1)
+         Hash Cond: (pm.match_id = m.match_id)
+         ->  Seq Scan on player_match pm  (cost=0.00..460.80 rows=25080 width=4) (actual time=0.029..2.132 rows=25080 loops=1)
+         ->  Hash  (cost=17.80..17.80 rows=380 width=4) (actual time=0.153..0.153 rows=380 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 22kB
+               ->  Index Scan using idx_match_cs on match m  (cost=0.15..17.80 rows=380 width=4) (actual time=0.070..0.104 rows=380 loops=1)
+                     Index Cond: (cs_id = 3)
+ Planning Time: 1.359 ms
+ Execution Time: 4.453 ms
+(10 rows)
+
+--- A2. hash join disabled -> the planner falls back to its second choice
+SET
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=657.85..657.86 rows=1 width=8) (actual time=2.390..2.390 rows=1 loops=1)
+   ->  Nested Loop  (cost=0.44..636.95 rows=8360 width=0) (actual time=0.022..2.124 rows=8360 loops=1)
+         ->  Index Scan using idx_match_cs on match m  (cost=0.15..17.80 rows=380 width=4) (actual time=0.002..0.029 rows=380 loops=1)
+               Index Cond: (cs_id = 3)
+         ->  Index Only Scan using player_match_pkey on player_match pm  (cost=0.29..1.41 rows=22 width=4) (actual time=0.003..0.004 rows=22 loops=380)
+               Index Cond: (match_id = m.match_id)
+               Heap Fetches: 0
+ Planning Time: 0.125 ms
+ Execution Time: 2.415 ms
+(9 rows)
+
+--- A3. hash AND nested loop disabled -> merge join
+SET
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=859.67..859.68 rows=1 width=8) (actual time=3.750..3.751 rows=1 loops=1)
+   ->  Merge Join  (cost=34.37..838.77 rows=8360 width=0) (actual time=2.432..3.486 rows=8360 loops=1)
+         Merge Cond: (pm.match_id = m.match_id)
+         ->  Index Only Scan using player_match_pkey on player_match pm  (cost=0.29..656.49 rows=25080 width=4) (actual time=0.004..2.259 rows=25080 loops=1)
+               Heap Fetches: 0
+         ->  Sort  (cost=34.09..35.04 rows=380 width=4) (actual time=0.074..0.087 rows=380 loops=1)
+               Sort Key: m.match_id
+               Sort Method: quicksort  Memory: 25kB
+               ->  Index Scan using idx_match_cs on match m  (cost=0.15..17.80 rows=380 width=4) (actual time=0.007..0.035 rows=380 loops=1)
+                     Index Cond: (cs_id = 3)
+ Planning Time: 0.061 ms
+ Execution Time: 4.167 ms
+(12 rows)
+
+RESET
+RESET
+=== B. Cost estimate vs reality (rows estimated vs actual) on a skewed filter ===
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=30068.11..30068.12 rows=1 width=8) (actual time=101.249..101.250 rows=1 loops=1)
+   ->  Seq Scan on event  (cost=0.00..30060.00 rows=3245 width=0) (actual time=0.209..101.087 rows=3209 loops=1)
+         Filter: ((minute > 85) AND (event_type = 'foul'::text))
+         Rows Removed by Filter: 1136791
+ Planning Time: 0.182 ms
+ Execution Time: 101.262 ms
+(6 rows)
+
+=== C. Materialised view for the season scorers leaderboard ===
+DROP MATERIALIZED VIEW
+psql:/work/portfolio-2-query-optimisation/sql/03_join_strategies_and_matview.sql:28: NOTICE:  materialized view "mv_season_scorers" does not exist, skipping
+SELECT 1560
+CREATE INDEX
+CREATE INDEX
+ANALYZE
+--- C1. Q1 against the base tables
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=3.831..3.833 rows=10 loops=1)
+   ->  Sort (actual time=3.831..3.832 rows=10 loops=1)
+         Sort Key: (sum(pm.goals)) DESC
+         Sort Method: top-N heapsort  Memory: 25kB
+         ->  HashAggregate (actual time=3.761..3.799 rows=520 loops=1)
+               Group Key: pm.player_id
+               Batches: 1  Memory Usage: 105kB
+               ->  Hash Join (actual time=1.695..3.028 rows=8360 loops=1)
+                     Hash Cond: (pm.match_id = m.match_id)
+                     ->  Seq Scan on player_match pm (actual time=0.002..1.211 rows=25080 loops=1)
+                     ->  Hash (actual time=0.065..0.065 rows=380 loops=1)
+                           Buckets: 1024  Batches: 1  Memory Usage: 22kB
+                           ->  Index Scan using idx_match_cs on match m (actual time=0.005..0.035 rows=380 loops=1)
+                                 Index Cond: (cs_id = 3)
+ Planning Time: 0.132 ms
+ Execution Time: 3.849 ms
+(16 rows)
+
+--- C2. same answer from the materialised view
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.302..0.303 rows=10 loops=1)
+   ->  Sort (actual time=0.302..0.302 rows=10 loops=1)
+         Sort Key: (sum(goals)) DESC
+         Sort Method: top-N heapsort  Memory: 25kB
+         ->  HashAggregate (actual time=0.190..0.248 rows=520 loops=1)
+               Group Key: player_id
+               Batches: 1  Memory Usage: 169kB
+               ->  Bitmap Heap Scan on mv_season_scorers (actual time=0.065..0.104 rows=520 loops=1)
+                     Recheck Cond: (cs_id = 3)
+                     Heap Blocks: exact=13
+                     ->  Bitmap Index Scan on mv_season_scorers_cs_id_goals_idx (actual time=0.061..0.061 rows=520 loops=1)
+                           Index Cond: (cs_id = 3)
+ Planning Time: 0.140 ms
+ Execution Time: 0.315 ms
+(14 rows)
+
+--- C3. cost of keeping it fresh
+Timing is on.
+REFRESH MATERIALIZED VIEW
+Time: 22.122 ms
+Timing is off.
+=== D. Slowest statements seen by pg_stat_statements ===
+CREATE EXTENSION
+ calls | total_ms | mean_ms  |                                           query                                            
+-------+----------+----------+--------------------------------------------------------------------------------------------
+     1 |  16063.9 | 16063.91 | COPY event FROM STDIN WITH (FORMAT csv, HEADER)
+    30 |  12281.8 |   409.39 | EXPLAIN (ANALYZE, BUFFERS, SETTINGS) SELECT t.canonical_name, p.full_name, s.goals FROM ( 
+    30 |   1220.5 |    40.68 | EXPLAIN (ANALYZE, BUFFERS, SETTINGS) SELECT e.player_id AS passer, e.receiver_id AS receiv
+    30 |   1137.4 |    37.91 | EXPLAIN (ANALYZE, BUFFERS, SETTINGS) SELECT count(*) AS passes, round(avg(end_x - x), $1) 
+     1 |    799.9 |   799.93 | -- Q6 CREATE INDEX idx_event_player_type ON event (player_id, event_type) -- Q5 (covering,
+(5 rows)
+
