@@ -1,0 +1,106 @@
+
+==============================================================================
+SCENARIO 1 - Atomic commit: correct a match result (A, C and D of ACID)
+==============================================================================
+[  0.37s] T1   match 771: team 1 v team 17, recorded score 2-1. VAR review changes it to 2-2 (a draw).
+[  0.38s] T1   BEFORE  standings team 1 (played,won,drawn,lost,pts) = (38, 8, 13, 17, 37)   team 17 = (38, 14, 7, 17, 49)
+[  0.38s] T1   correct_result() ran inside the open transaction (not yet committed)
+[  0.39s] T2   another session still sees the OLD score before commit: (2, 1)   (isolation)
+[  0.39s] T1   COMMIT
+[  0.39s] T1   AFTER   score (2, 2)  standings team 1 = (38, 7, 14, 17, 35)   team 17 = (38, 14, 8, 16, 50)
+[  0.40s] T1   audit row written in the same transaction: [(2, 1, 2, 2, 'VAR review: goal disallowed')]
+[  0.40s] T1   standings vs fresh recomputation: 0 drifting rows (consistency)
+
+==============================================================================
+SCENARIO 2 - Rollback and savepoints (atomicity when something fails halfway)
+==============================================================================
+[  0.48s] T1   BEFORE standings team 1 = (38, 8, 13, 17, 37)
+[  0.48s] T1   step 1: correct_result() succeeds ...
+[  0.48s] T1      inside tx: team 1 = (38, 7, 14, 17, 35)
+[  0.48s] T1   step 2: a buggy script now forces an invalid row (points that do not equal 3*won+drawn) ...
+[  0.48s] T1      REJECTED by CHECK constraint: standings_points_ok
+[  0.48s] T1   ROLLBACK -> step 1 is undone too
+[  0.50s] T1   AFTER   score (2, 1)  team 1 = (38, 8, 13, 17, 37)  audit rows = 0
+[  0.50s] --   
+[  0.50s] T1   Savepoint demo: ingest 3 jobs, the middle one is bad. Only the bad one is undone.
+[  0.51s] T1   job for match 1: OK
+[  0.51s] T1   job for match 999999: FK violation -> ROLLBACK TO SAVEPOINT (other jobs unaffected)
+[  0.51s] T1   job for match 2: OK
+[  0.52s] T1   COMMIT. Jobs stored: 2 (expected 2 of 3)
+
+==============================================================================
+SCENARIO 3 - Isolation levels: non-repeatable read and phantom read
+==============================================================================
+[  0.58s] --   --- READ COMMITTED (Postgres default) ---
+[  0.58s] T1   read #1: team 1 points = 37; ingestion jobs = 0
+[  0.59s] T2   committed: corrected a score (changes team points) and inserted one new ingestion job
+[  0.59s] T1   read #2: team 1 points = 35; ingestion jobs = 1
+[  0.59s] T1     non-repeatable read? YES   phantom row? YES
+[  0.62s] --   --- REPEATABLE READ ---
+[  0.63s] T1   read #1: team 1 points = 37; ingestion jobs = 0
+[  0.63s] T2   committed: corrected a score (changes team points) and inserted one new ingestion job
+[  0.63s] T1   read #2: team 1 points = 37; ingestion jobs = 0
+[  0.63s] T1     non-repeatable read? no   phantom row? no
+[  0.66s] --   --- REPEATABLE READ and a write that conflicts with a newer commit ---
+[  0.67s] T1   snapshot taken, points = 37
+[  0.67s] T2   committed an UPDATE of the same standings row
+[  0.67s] T1   UPDATE refused: could not serialize access due to concurrent update  -> application must retry the transaction
+[  0.67s] --   --- 'Dirty read' check: READ UNCOMMITTED request ---
+[  0.69s] T2   requested READ UNCOMMITTED (session reports 'read uncommitted', but Postgres implements it as READ COMMITTED); sees home_goals = 2 although T1 has uncommitted 6 -> no dirty read possible
+
+==============================================================================
+SCENARIO 4 - Lost update: two workers add a win to the same standings row
+==============================================================================
+[  0.74s] --   --- A) naive read-modify-write (BUG); start won/points = (8, 37); two workers each add one win (+3 pts) ---
+[  0.75s] W2   read played=38 won=8 points=37
+[  0.75s] W1   read played=38 won=8 points=37
+[  0.86s] W2   COMMIT
+[  0.86s] W1   COMMIT
+[  0.87s] --   final won/points = (9, 40)   expected = (10, 43)   -> LOST UPDATE
+[  0.91s] --   --- B) fix 1: SELECT ... FOR UPDATE; start won/points = (8, 37); two workers each add one win (+3 pts) ---
+[  0.91s] W2   locked row, read played=38 won=8 points=37
+[  1.22s] W2   COMMIT
+[  1.22s] W1   locked row, read played=39 won=9 points=40
+[  1.54s] W1   COMMIT
+[  1.55s] --   final won/points = (10, 43)   expected = (10, 43)   -> CORRECT
+[  1.59s] --   --- C) fix 2: single atomic UPDATE (won = won + 1); start won/points = (8, 37); two workers each add one win (+3 pts) ---
+[  1.60s] W1   COMMIT
+[  1.60s] W2   COMMIT
+[  1.60s] --   final won/points = (10, 43)   expected = (10, 43)   -> CORRECT
+
+==============================================================================
+SCENARIO 5 - Deadlock: two corrections lock the same two teams in opposite order
+==============================================================================
+[  1.67s] --   --- A) opposite order: T1 locks 1 then 17; T2 locks 17 then 1 ---
+[  1.68s] T2   locked team 17
+[  1.68s] T1   locked team 1
+[  1.88s] T2   now wants team 1 ...
+[  1.88s] T1   now wants team 17 ...
+[  2.89s] T1   ABORTED by Postgres: deadlock detected
+[  2.89s] T2   COMMIT (locked 17 then 1)
+[  2.89s] --   --- B) fix: both lock in ascending team_id order (1 then 17) ---
+[  2.91s] T1   locked team 1
+[  3.11s] T1   now wants team 17 ...
+[  3.13s] T1   COMMIT (locked 1 then 17)
+[  3.13s] T2   locked team 1
+[  3.33s] T2   now wants team 17 ...
+[  3.34s] T2   COMMIT (locked 1 then 17)
+[  3.34s] --   both committed: the second transaction simply waited for the first (this is what correct_result() does)
+
+==============================================================================
+SCENARIO 6 - Write skew: 'at most 2 ingestion jobs may run per provider'
+==============================================================================
+[  3.41s] --   --- REPEATABLE READ: one job already running, two sessions each try to start another ---
+[  3.43s] T1   sees 1 running job(s); limit is 2, so starting one more looks safe
+[  3.43s] T2   sees 1 running job(s); limit is 2, so starting one more looks safe
+[  3.43s] T2   COMMIT
+[  3.43s] T1   COMMIT
+[  3.44s] --   running jobs now = 3   -> LIMIT BROKEN (write skew)
+[  3.47s] --   --- SERIALIZABLE: one job already running, two sessions each try to start another ---
+[  3.48s] T1   sees 1 running job(s); limit is 2, so starting one more looks safe
+[  3.48s] T2   sees 1 running job(s); limit is 2, so starting one more looks safe
+[  3.49s] T2   COMMIT
+[  3.49s] T1   ABORTED: could not serialize access due to read/write dependencies among transactions -> retry would see 2 running and refuse
+[  3.49s] --   running jobs now = 2   -> limit respected
+[  3.53s] --   
+FINAL CHECK: database restored, standings drift rows = 0
