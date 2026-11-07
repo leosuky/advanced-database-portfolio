@@ -1,0 +1,10 @@
+# generated data (reproduce with data-generator/generate_data.py)
+data-generator/csv/
+*.csv
+# python
+__pycache__/
+.venv/
+*.pyc
+# local database folders / OS
+.DS_Store
+pgdata/

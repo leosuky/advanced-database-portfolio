@@ -1,0 +1,5 @@
+psycopg2-binary==2.9.13
+redis==8.1.0
+pymongo==4.19.0
+mongomock==4.3.0
+numpy>=1.26

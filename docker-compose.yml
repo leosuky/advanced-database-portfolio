@@ -1,0 +1,26 @@
+# Services for Portfolios 1-4. (Portfolio 5 needs PostgreSQL binaries on the host - see portfolio-5/README.md.)
+# Ports are deliberately NOT the defaults so they never clash with your other databases (e.g. The Data XI on :4500).
+services:
+  postgres:
+    image: postgres:16
+    container_name: ads_postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust          # local coursework only - never use trust auth in production
+    ports: ["127.0.0.1:5433:5432"]
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "wal_level=replica", "-c", "max_wal_senders=10"]
+    volumes:
+      - ./:/work:ro                              # so psql inside the container can read the SQL and CSV files
+      - ./docker/10-hba.sh:/docker-entrypoint-initdb.d/10-hba.sh:ro
+      - pgdata:/var/lib/postgresql/data
+  redis:
+    image: redis:7
+    container_name: ads_redis
+    ports: ["127.0.0.1:6390:6379"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+  mongo:
+    image: mongo:7
+    container_name: ads_mongo
+    ports: ["127.0.0.1:27017:27017"]
+volumes:
+  pgdata:
