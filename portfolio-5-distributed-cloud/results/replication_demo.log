@@ -1,0 +1,48 @@
+[setup] cloning the dataxi cluster on :5432 into a new primary on :5441 with pg_basebackup ...
+[setup] streaming replica on :5442 (pg_basebackup -R writes standby.signal + primary_conninfo)
+
+=== 1. The replica is a read-only copy ===
+pg_is_in_recovery(): primary=False  replica=True
+matches on primary=1140  replica=1140   events replica=1140000
+write on replica -> ReadOnlySqlTransaction: cannot execute INSERT in a read-only transaction
+read scaling: the API's read-only queries can be pointed at the replica (host/port change only):
+   top scorer via replica = ('Viktor Martin', 32)
+replication status as seen from the primary (pg_stat_replication):
+   application_name=replica1 state=streaming sync_state=async
+
+=== 2. Asynchronous replication: lag under a write burst ===
+primary committed 400,000 rows in 3.89s. Replica could see 0 of them immediately after; it was 2833 KiB of WAL behind.
+a moment later the replica shows 400,000 rows (it caught up) -> the replica is EVENTUALLY consistent
+
+=== 3. Synchronous replication: commit waits for the replica ===
+median commit time, 60 single-row inserts:  async ('local') = 0.30 ms   |   sync ('remote_apply', sync_state=sync) = 0.58 ms
+read-your-writes check: row 121 was acknowledged by the primary, and the replica already shows it: True
+
+=== 4. Consistency vs availability: synchronous primary, replica goes DOWN ===
+replica stopped (simulates a network partition / node failure)
+after 4 s the insert is still not acknowledged; pg_stat_activity says the session is waiting on IPC/SyncRep
+-> sync replication chooses CONSISTENCY over availability: the primary will not acknowledge a write nobody else has (CP behaviour)
+operator cancels the wait; Postgres replies: WARNING:  canceling wait for synchronous replication due to user request
+DETAIL:  The transaction has already committed locally, but might not have been replicated to the standby.
+   the row is now committed LOCALLY only (visible on the primary: True) but was never replicated
+after switching back to async: the same insert returns in 13.1 ms -> async chooses AVAILABILITY (AP-leaning), but the replica is now missing data
+replica restarted and caught up from the primary's WAL
+
+=== 5. Failover with ASYNC replication: can an acknowledged commit be lost? ===
+network partition: replica is unreachable
+primary ACKNOWLEDGED the commit to the client (async mode, nobody waiting)
+primary CRASHES (pg_ctl stop -m immediate)
+replica PROMOTED: pg_is_in_recovery() = False  (it is the new primary and accepts writes)
+is the acknowledged row on the new primary? NO - it was lost (data-loss window: RPO > 0 for async replication)
+
+=== 6. The old primary comes back: it has a write the new primary never saw ===
+old primary restarted on :5441; it still thinks it is primary (pg_is_in_recovery=False)
+   old primary has the lost row: 1   new primary has it: 0
+   => TWO nodes each believe they are primary with DIFFERENT data = split brain. Real systems prevent it by
+      fencing the old primary (STONITH / cloud API) and rebuilding it as a replica with pg_rewind or a fresh pg_basebackup.
+
+=== 7. Same failure with SYNCHRONOUS replication: nothing acknowledged is lost ===
+old primary REBUILT as a replica of :5442  (pg_is_in_recovery=True)
+acknowledged commit on current primary :5442 (sync_state=sync)
+current primary CRASHES. Promote the standby on :5441 ...
+row present on the promoted standby: True   (RPO = 0)
