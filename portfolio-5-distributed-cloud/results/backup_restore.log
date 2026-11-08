@@ -1,0 +1,21 @@
+== source database
+match|1140
+player_match|25080
+event|1140000
+standings|60
+size: 197 MB
+== backup: pg_dump -Fc
+dump time: 3.5 s   dump size: 18M
+== restore into a NEW database (dataxi_restore) with 4 parallel jobs
+DROP DATABASE
+NOTICE:  database "dataxi_restore" does not exist, skipping
+CREATE DATABASE
+restore time: 4.3 s
+== verify: the restored copy must match the source
+match: 1140 = 1140  OK
+player_match: 25080 = 25080  OK
+event: 1140000 = 1140000  OK
+standings: 60 = 60  OK
+event content checksum identical (5d9b96ef1d588aa8a2b5271a54e8b838)
+DROP DATABASE
+RPO of a nightly logical backup = up to 24 h of lost writes; point-in-time recovery needs WAL archiving.

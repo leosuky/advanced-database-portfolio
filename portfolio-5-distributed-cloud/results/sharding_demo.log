@@ -1,0 +1,65 @@
+[setup] two independent PostgreSQL nodes started: shard1 :5443, shard2 :5444
+
+=== 1. Loading through the coordinator: rows are routed by hash(match_id) ===
+inserted 1,140,000 events through event_sharded in 13s (each row sent to the shard that owns its match)
+shard1 holds 617,000 events from 617 matches | shard2 holds 523,000 events from 523 matches
+balance: 8.2% difference between shards (hash distribution)
+count through the coordinator = 1,140,000  (matches the source table: 1,140,000)
+
+=== 2. Shard pruning: a query that includes the shard key touches ONE node ===
+   Aggregate
+     Output: count(*)
+     ->  Foreign Scan on public.event_s2 event_sharded
+           Remote SQL: SELECT NULL FROM public.event_shard WHERE ((match_id = 951))
+   Query Identifier: -6614695232960657211
+
+   ...but a query WITHOUT the shard key must ask both nodes (scatter-gather):
+   Aggregate
+     Output: count(*)
+     ->  Append
+           ->  Foreign Scan on public.event_s1 event_sharded_1
+                 Remote SQL: SELECT NULL FROM public.event_shard WHERE ((player_id = 417))
+           ->  Foreign Scan on public.event_s2 event_sharded_2
+                 Remote SQL: SELECT NULL FROM public.event_shard WHERE ((player_id = 417))
+   Query Identifier: 4026076275410400898
+
+=== 3. Latency: sharded vs the single-node table ===
+point lookup (one match):    single node   0.12 ms | sharded via coordinator   0.55 ms   (extra network hop, same work)
+full aggregate (all events): single node     52 ms | sharded, one aggregate at the coordinator    502 ms | sharded, per-partition partial aggregates    504 ms
+   -> postgres_fdw (PG16) only pushes FILTERS to the shards; for GROUP BY every needed column is shipped to the coordinator, so a full scan is far slower than on one node.
+      Sharding is not automatically faster. The gain is capacity (data bigger than one node) and keeping every per-match query on one shard.
+
+=== 4. A cross-shard join with local dimension data ===
+   GroupAggregate
+     Output: m.matchday, count(*)
+     ->  Hash Join
+           Output: m.matchday
+           Hash Cond: (e.match_id = m.match_id)
+           ->  Append
+                 ->  Foreign Scan on public.event_s1 e_1
+                       Output: e_1.match_id
+                       Remote SQL: SELECT match_id FROM public.event_shard
+                 ->  Foreign Scan on public.event_s2 e_2
+                       Output: e_2.match_id
+                       Remote SQL: SELECT match_id FROM public.event_shard
+           ->  Hash
+                 Output: m.matchday, m.match_id
+                 ->  Seq Scan on public.match_local m
+                       Output: m.matchday, m.match_id
+                       Filter: ((m.cs_id = 3) AND (m.matchday = 10))
+   Query Identifier: 2368509437308545587
+
+=== 5. Partial availability: shard2 goes down ===
+match 1 (lives on shard1): 1,000 events returned normally
+query over all matches -> SqlclientUnableToEstablishSqlconnection: could not connect to server "shard2"
+   -> only the matches on the failed shard are unavailable; with a replica per shard (Part 5a) even those survive.
+
+=== 6. The cost of adding a third shard (rebalancing) ===
+placement rule hash(match_id) mod 2: my formula puts 617 matches on shard1 and 523 on shard2; PostgreSQL's own satisfies_hash_partition() says 617 on shard1; actual 617 / 523
+   -> formula verified against the real placement
+going from 2 to 3 shards by hash-mod changes the owner of 739 of 1,140 matches (65%) -> a large data migration. Consistent hashing or range sharding by match_id would move far fewer.
+
+=== 7. What sharding costs you (design limits seen above) ===
+   - no global primary key or foreign keys across shards: event_id is only unique within a shard (PostgreSQL cannot enforce it across foreign partitions)
+   - queries must carry the shard key (match_id) or they fan out to every node
+   - cross-shard transactions would need two-phase commit; this design avoids them because one match = one shard
