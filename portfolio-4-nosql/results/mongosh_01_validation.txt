@@ -1,0 +1,12 @@
+{
+  ok: 1
+}
+--- the validator rejects a bad document:
+REJECTED: code 121 (DocumentValidationFailure if code is 121)
+message: Document failed validation
+[
+  '_id_',
+  'home.team_id_1_season_1',
+  'away.team_id_1_season_1',
+  'shots.player_id_1'
+]

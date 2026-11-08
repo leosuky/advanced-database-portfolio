@@ -1,0 +1,68 @@
+--- M1 point read
+{
+  _id: 951,
+  season: '2025/26',
+  matchday: 20,
+  kickoff: ISODate('2025-12-27T20:00:00.000Z'),
+  home: {
+    team_id: 1,
+    name: 'Northgate United',
+    goals: 2,
+    xg: 2.08,
+    shots: 15,
+    possession: 52.7
+  },
+  away: {
+    team_id: 16,
+    name: 'Marlowe United',
+    goals: 1,
+    xg: 1.38,
+    shots: 16,
+    possession: 46.9
+  }
+}
+--- M2 fixtures with execution stats (expect IXSCAN, not COLLSCAN)
+plan stages: SORT <- FETCH <- IXSCAN(home.team_id_1_season_1)
+docsExamined=19 returned=19 ms=1
+--- M3 top scorers (aggregation)
+[
+  {
+    _id: {
+      id: 167,
+      name: 'Ade Santos'
+    },
+    goals: 12
+  },
+  {
+    _id: {
+      id: 141,
+      name: 'Chidi Silva'
+    },
+    goals: 11
+  },
+  {
+    _id: {
+      id: 454,
+      name: 'Omar Costa'
+    },
+    goals: 10
+  },
+  {
+    _id: {
+      id: 452,
+      name: 'Femi Silva'
+    },
+    goals: 10
+  },
+  {
+    _id: {
+      id: 296,
+      name: 'Ezra Adeyemi'
+    },
+    goals: 10
+  }
+]
+--- M4 stoppage-time goals
+114
+--- same query without the index hint-free planner: forced collection scan for comparison
+COLLSCAN docsExamined=1140 ms=0

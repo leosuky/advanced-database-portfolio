@@ -1,0 +1,33 @@
+(backend: real MongoDB at mongodb://127.0.0.1:27017: 7.0.45)
+loaded 1140 match documents and 800 raw payloads
+one match document is about 5.1 KB of JSON (lineups + shots embedded)
+
+--- M1. point read: the whole match page in ONE document read
+    Northgate United 2-1 Marlowe United   home line-up size=11   (PostgreSQL needed joins across 5 tables for this)
+
+--- M2. team's fixtures in one season, newest first (uses the compound index)
+    MD38: Oakhurst Rovers 0-1 Northgate United
+    MD37: Northgate United 1-1 Glenmoor United
+    MD36: Dunmore Rovers 1-1 Northgate United
+
+--- M3. aggregation pipeline: top 5 scorers of 2025/26 (unwind line-ups)
+    Ade Santos             12
+    Chidi Silva            11
+    Omar Costa             10
+    Femi Silva             10
+    Ezra Adeyemi           10
+
+--- M4. array query ($elemMatch): matches with a stoppage-time goal (after minute 90)
+    114 matches
+
+--- M5. schema-on-read: four providers, four shapes, one collection
+    provider_a: top-level payload keys = ['events', 'matchId']
+    provider_b: top-level payload keys = ['general', 'stats']
+    provider_c: top-level payload keys = ['shotmap']
+    provider_d: top-level payload keys = ['lineups', 'schema_version']
+    provider_d payloads already on schema_version 2: 100 (versions can be mixed - no migration needed to ingest)
+
+--- trade-off check: updating a goal in a document vs PostgreSQL
+    one corrected score touches: match_documents.home.goals, away.goals AND the embedded lineup.goals AND the shots list
+    -> the same fact lives in several places; the application (or a change stream) must keep them in step.
+    In PostgreSQL the same correction is one row in `match` (plus the derived standings, Portfolio 3).
