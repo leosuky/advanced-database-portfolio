@@ -1,7 +1,6 @@
 # Portfolio 5: Distributed and Cloud Database Exercise
 
-Three ideas from the course's Study Session 2 and 3 are applied to The Data XI and **run on real PostgreSQL servers**
-(not simulated): replication and consistency, fragmentation (sharding), and backup/recovery and cloud deployment.
+Three ideas from the course's Study Session 2 and 3 are applied to The Data XI and **run on real PostgreSQL servers**: replication and consistency, fragmentation (sharding), and backup/recovery and cloud deployment.
 
 | Part | Script | Evidence |
 |---|---|---|
